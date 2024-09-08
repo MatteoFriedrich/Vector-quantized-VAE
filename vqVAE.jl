@@ -68,7 +68,7 @@ mutable struct VectorQuantizer
         z_q = collect([quantizeVec(vq, z[row, col, :, n]) for row = 1:H, col = 1:W, n=1:B])
         z_q_reshaped = collect(z_q[row, col, n][k] for row in 1:H, col in 1:W, k in 1:C, n in 1:B)
 
-        return z + stop_gradient(z_q_reshaped - z), z_q_reshaped
+        return z + stop_gradient(z_q_reshaped - z)
     end
 end
 
@@ -90,15 +90,16 @@ end
 # Full loss function: combining reconstruction loss and vector quantization loss
 function loss(x)
     # Forward pass through encoder, vector quantizer, and decoder
-    @time z = encoder(x)
-    @time z_q, z_q_reshaped = vq(z)  # Quantize the latent space with the vector quantizer
-    x̂ = decoder(z_q_reshaped)  # Decode the quantized latent space
+    z = encoder(x)
+    z_q = vq(z)  # Quantize the latent space with the vector quantizer
+    x̂ = decoder(z_q)  # Decode the quantized latent space
     
     # Compute the different losses
     rec_loss = reconstruction_loss(x, x̂)  # Reconstruction loss
-    vq_codebook_loss = vq_loss(z, z_q)     # Vector quantization + commitment loss
     
-    return rec_loss + vq_codebook_loss
+    quantizer_loss = vq_loss(z, z_q)     # Vector quantization + commitment loss
+    
+    return rec_loss + quantizer_loss
 end
 
 # Initialize Vector Quantizer and Optimizer
@@ -111,11 +112,13 @@ opt = Flux.ADAM(learning_rate)
 
 # Hyperparameters
 num_epochs = 1
-batch_size = 16
+batch_size = 512
+
+@time println(loss(train_X[:,:,:,1:1000]))
 
 # Training loop
-for epoch in 1:num_epochs
-    for i in 1:batch_size# :size(train_X, 4)
+for epoch in 1:1
+    for i in 1:batch_size:size(train_X, 4)
         
         println(i)
         batch = train_X[:, :, :, i:min(i + batch_size - 1, size(train_X, 4))]
